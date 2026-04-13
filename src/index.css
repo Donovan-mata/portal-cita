@@ -1,0 +1,263 @@
+@import url('https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700;800&display=swap');
+@import "tailwindcss";
+@custom-variant dark (&:is(.dark, .dark *));
+
+:root {
+  --color-primary: #d41111;
+  --color-primary-hover: #b00e0e;
+  --color-primary-gradient: linear-gradient(135deg, #d41111 0%, #f97316 100%);
+  --color-primary-light: rgba(212, 17, 17, 0.08);
+  
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94a3b8;
+  
+  --color-bg-page: #f8fafc;
+  --color-bg-card: #ffffff;
+  --color-bg-highlight: #f1f5f9;
+
+  --color-border: #e2e8f0;
+  --color-border-light: rgba(255, 255, 255, 0.5);
+
+  --font-family-base: 'Public Sans', system-ui, -apple-system, sans-serif;
+  
+  --border-radius-sm: 8px;
+  --border-radius-md: 16px;
+  --border-radius-lg: 24px;
+  --border-radius-full: 9999px;
+
+  --shadow-soft: 0 4px 20px -2px rgba(15, 23, 42, 0.05);
+  --shadow-hover: 0 20px 25px -5px rgba(15, 23, 42, 0.1), 0 8px 10px -6px rgba(15, 23, 42, 0.05);
+  --shadow-primary: 0 10px 25px -5px rgba(212, 17, 17, 0.4);
+  --shadow-primary-hover: 0 20px 30px -5px rgba(212, 17, 17, 0.5);
+  --shadow-glass: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+  
+  --max-width-content: 1280px;
+}
+
+.dark {
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #a1a1aa;
+  --color-text-muted: #71717a;
+  
+  --color-bg-page: #18181b;
+  --color-bg-card: #27272a;
+  --color-bg-highlight: #3f3f46;
+
+  --color-border: #3f3f46;
+  --color-border-light: rgba(255, 255, 255, 0.03);
+
+  --shadow-soft: 0 4px 20px -2px rgba(0, 0, 0, 0.8);
+  --shadow-hover: 0 20px 25px -5px rgba(0, 0, 0, 0.9), 0 8px 10px -6px rgba(0, 0, 0, 0.6);
+  --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+}
+
+body {
+  font-family: var(--font-family-base);
+  background-color: var(--color-bg-page);
+  color: var(--color-text-primary);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-bg-page);
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: var(--border-radius-full);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+@layer base {
+  a {
+    color: var(--color-primary);
+    text-decoration: none;
+  }
+
+  button {
+    font-family: inherit;
+    cursor: pointer;
+    border: none;
+  }
+}
+
+ul {
+  list-style: none;
+}
+
+.glass-effect {
+  background: rgba(var(--color-bg-card), 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--color-border-light);
+  box-shadow: var(--shadow-glass);
+}
+
+.dark .glass-effect {
+  background: rgba(24, 24, 27, 0.7);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-soft);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dark .glass-card {
+  background: rgba(24, 24, 27, 0.85);
+}
+
+.text-gradient {
+  background: var(--color-primary-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent;
+}
+
+@keyframes fadeInUp {
+  from { 
+    opacity: 0; 
+    transform: translateY(24px) scale(0.98); 
+  }
+  to { 
+    opacity: 1; 
+    transform: translateY(0) scale(1); 
+  }
+}
+
+.animate-fade-in-up {
+  opacity: 0;
+  animation: fadeInUp 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-15px); }
+  100% { transform: translateY(0px); }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* === Scroll & Smooth Scrolling === */
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 5rem; /* 80px - altura del header fijo */
+}
+
+/* Offset adicional para secciones con anchor links */
+section[id] {
+  scroll-margin-top: 5rem;
+}
+
+/* "Mi Cita" - Fill from left on hover */
+.btn-outline-animate {
+  position: relative;
+  overflow: hidden;
+  z-index: 0;
+  transition: color 0.35s ease, box-shadow 0.35s ease, transform 0.2s ease;
+}
+.btn-outline-animate::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--color-primary-gradient);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: -1;
+  border-radius: inherit;
+}
+.btn-outline-animate:hover::before {
+  transform: scaleX(1);
+}
+.btn-outline-animate:hover {
+  color: #ffffff !important;
+  border-color: #d41111;
+  box-shadow: 0 8px 25px -4px rgba(212, 17, 17, 0.45);
+  transform: translateY(-2px);
+}
+.dark .btn-outline-animate:hover {
+  box-shadow: 0 0 15px 2px rgba(212, 17, 17, 0.4);
+}
+.btn-outline-animate:active {
+  transform: translateY(0px) scale(0.97);
+}
+
+/* "Nueva Cita" - Shimmer shine sweep on hover */
+.btn-shine {
+  position: relative;
+  overflow: hidden;
+  transition: box-shadow 0.3s ease, transform 0.2s ease;
+}
+.btn-shine::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(
+    120deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.35) 50%,
+    transparent 100%
+  );
+  transform: skewX(-20deg);
+  transition: left 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.btn-shine:hover::after {
+  left: 150%;
+}
+.btn-shine:hover {
+  box-shadow: 0 0 0 2px rgba(212, 17, 17, 0.3),
+              0 8px 30px -4px rgba(212, 17, 17, 0.55);
+  transform: translateY(-2px);
+}
+.dark .btn-shine:hover {
+  box-shadow: 0 0 15px 2px rgba(212, 17, 17, 0.5);
+}
+.btn-shine:active {
+  transform: translateY(0px) scale(0.97);
+}
+
+@layer utilities {
+  .text-primary { color: var(--color-primary); }
+  .text-secondary { color: var(--color-text-secondary); }
+  .text-muted { color: var(--color-text-muted); }
+
+  .bg-card { background-color: var(--color-bg-card); }
+  .bg-page { background-color: var(--color-bg-page); }
+  .bg-highlight { background-color: var(--color-bg-highlight); }
+
+  .border-border { border-color: var(--color-border); }
+
+  .bg-primary-light {
+    background-color: var(--color-primary-light);
+  }
+}
+
+
+
+.hero-gradient {
+  background: linear-gradient(to bottom, var(--color-bg-highlight), var(--color-bg-page));
+}
+
+/* Smooth transition for theme changes */
+body, .bg-card, .bg-page, .bg-highlight, .glass-card, .glass-effect, .border-border {
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
