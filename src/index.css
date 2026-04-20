@@ -62,18 +62,29 @@ body {
   overflow-x: hidden;
 }
 
+/* === Custom Scrollbar === */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 10px;
 }
+
 ::-webkit-scrollbar-track {
   background: var(--color-bg-page);
 }
+
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: var(--border-radius-full);
+  background: linear-gradient(to bottom, #cbd5e1, #94a3b8);
+  border-radius: 20px;
+  border: 3px solid var(--color-bg-page);
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: linear-gradient(to bottom, #94a3b8, #64748b);
+}
+
+/* For Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 var(--color-bg-page);
 }
 
 @layer base {

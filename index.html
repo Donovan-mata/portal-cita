@@ -5,9 +5,29 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VerifiCDMX – Portal de Citas</title>
+    <script>
+      (function() {
+        try {
+          var item = localStorage.getItem('theme-storage');
+          var theme = item ? JSON.parse(item).state.theme : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          if (theme === 'dark') {
+            document.documentElement.classList.add('dark');
+            document.documentElement.style.backgroundColor = '#18181b'; /* var(--color-bg-page) in dark */
+          } else {
+            document.documentElement.classList.remove('dark');
+            document.documentElement.style.backgroundColor = '#f8fafc'; /* var(--color-bg-page) in light */
+          }
+        } catch (e) {}
+      })();
+    </script>
     <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        /* Default to dark background if something prevents script execution quickly */
+        background-color: #18181b; 
+      }
       #root:empty {
-        background: #09090b; /* zinc-950 */
         display: flex;
         align-items: center;
         justify-content: center;

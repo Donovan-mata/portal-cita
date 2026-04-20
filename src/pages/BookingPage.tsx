@@ -1,16 +1,18 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Calendar, Car, Clock, Check, ChevronRight, CarFront, Truck, Plus, Trash2 } from 'lucide-react';
+import { Calendar, Car, Clock, Check, ChevronRight, CarFront, Truck, Plus, Trash2, Leaf, Copy, CheckCircle2, MapPin } from 'lucide-react';
 import { useAppointmentStore } from '@/store/appointmentStore';
 import { useMyCitasStore, generateFolio } from '@/store/myCitasStore';
-import { Copy, CheckCircle2 } from 'lucide-react';
 
 import Header from '@/components/Header';
-import { Link } from 'react-router-dom';
-import { Button } from '@/components/ui';
+import { useLocation, Link } from 'react-router-dom';
+import { Button, CalendarPicker } from '@/components/ui';
+import { getHologramInfo } from '@/lib/hologram';
+import { verificationCenters } from '@/data/verificationCenters';
+import { HologramBadge } from '@/components/booking/HologramBadge';
 
 const singleVehicleSchema = z.object({
   plate: z.string()
@@ -33,6 +35,8 @@ const vehicleTypes = [
   { value: 'carga', label: 'Carga', icon: Truck },
 ];
 
+
+
 // Single lightweight fade variant used everywhere
 const fadeUp: any = {
   hidden: { opacity: 0, y: 14 },
@@ -41,17 +45,59 @@ const fadeUp: any = {
 };
 
 function BookingPage() {
-  const { selectedDate, selectedTime, setSelectedDate, setSelectedTime, setVehiclesInfo, vehiclesInfo, reset } = useAppointmentStore();
-  const { addCita } = useMyCitasStore();
+  const { 
+    selectedCenter, 
+    selectedDate, 
+    selectedTime, 
+    setSelectedCenter,
+    setSelectedDate, 
+    setSelectedTime, 
+    setVehiclesInfo, 
+    vehiclesInfo, 
+    reset 
+  } = useAppointmentStore();
+  const { addCita, removeCita, citas, fetchCitas } = useMyCitasStore();
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [confirmedData, setConfirmedData] = useState<{
     vehicles: { plate: string; type: string; model: string; folio: string }[]; date: string; time: string;
   } | null>(null);
-  const [step, setStep] = useState<1 | 2>(1); // 1 = datos, 2 = fecha+hora
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const isRescheduleFlow = queryParams.get('reschedule') === 'true';
+  const rescheduleId = queryParams.get('id');
+
+  const [step, setStep] = useState<1 | 2>(isRescheduleFlow ? 2 : 1);
   const [isFleetMode, setIsFleetMode] = useState(false);
   const [copiedFolio, setCopiedFolio] = useState<string | null>(null);
 
-  const { register, control, handleSubmit, watch, formState: { errors } } = useForm<FormValues>({
+  useEffect(() => {
+    if (isRescheduleFlow) {
+      setStep(2);
+      // If we don't have vehicles info yet, or it's a different reschedule, try to load it from the store
+      if (rescheduleId) {
+        if (citas.length === 0) {
+          fetchCitas();
+        }
+        
+        const existingCita = citas.find(c => c.id === rescheduleId);
+        if (existingCita) {
+          setVehiclesInfo([{
+            plate: existingCita.vehicle,
+            type: existingCita.vehicleType,
+            model: existingCita.vehicleModel || '2024' // Fallback to 2024 if missing
+          }]);
+          
+          // Also try to find and set the same center
+          const center = verificationCenters.find(vc => vc.name === existingCita.center);
+          if (center) setSelectedCenter(center);
+        }
+      }
+    } else {
+      setStep(1);
+    }
+  }, [isRescheduleFlow, rescheduleId, citas, fetchCitas, setVehiclesInfo]);
+
+  const { register, control, handleSubmit, watch, reset: resetForm, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       vehicles: vehiclesInfo && vehiclesInfo.length > 0
@@ -59,6 +105,18 @@ function BookingPage() {
         : [{ plate: '', vehicleType: 'particular', model: '' }]
     }
   });
+
+  useEffect(() => {
+     if (isRescheduleFlow && (vehiclesInfo?.length ?? 0) > 0) {
+       resetForm({
+         vehicles: vehiclesInfo!.map(v => ({ 
+           plate: v.plate, 
+           vehicleType: v.type as 'particular'|'taxi'|'carga', 
+           model: v.model 
+         }))
+       });
+     }
+  }, [isRescheduleFlow, vehiclesInfo, resetForm]);
 
   const { fields, append, remove } = useFieldArray({ control, name: 'vehicles' });
   const watchedVehicles = watch('vehicles');
@@ -68,26 +126,37 @@ function BookingPage() {
     setStep(2);
   };
 
-  const handleConfirmAppointment = () => {
-    if (!selectedDate || !selectedTime || !vehiclesInfo) return;
+  const handleConfirmAppointment = async () => {
+    if (!selectedCenter || !selectedDate || !selectedTime || !vehiclesInfo) return;
+
+    // If we're rescheduling, remove the old one first
+    if (rescheduleId) {
+      await removeCita(rescheduleId);
+    }
+
+    const existingCita = rescheduleId ? citas.find(c => c.id === rescheduleId) : null;
     const dateLabel = new Date(selectedDate + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' });
     
-    const newConfirmedVehicles: { plate: string; type: string; model: string; folio: string }[] = [];
+    const newConfirmedVehicles: { plate: string; type: string; model: string; folio: string; hologram?: string; hologramLabel?: string }[] = [];
 
-    vehiclesInfo.forEach(v => {
+    for (const v of vehiclesInfo) {
       const folio = generateFolio();
-      addCita({
+      const holoInfo = getHologramInfo(v.model);
+      await addCita({
         vehicle: v.plate,
         vehicleType: v.type,
         folio: folio,
-        center: 'Verificentro Vallejo AZ20',
-        address: 'Industrial Vallejo, Azcapotzalco',
+        center: selectedCenter.name,
+        address: selectedCenter.address,
         date: dateLabel,
         time: selectedTime,
         status: 'confirmada',
+        vehicleModel: v.model,
+        hologram: holoInfo?.hologram,
+        hologramLabel: holoInfo?.label,
       });
-      newConfirmedVehicles.push({ ...v, folio });
-    });
+      newConfirmedVehicles.push({ ...v, folio, hologram: holoInfo?.hologram, hologramLabel: holoInfo?.label });
+    }
 
     setConfirmedData({ vehicles: newConfirmedVehicles, date: dateLabel, time: selectedTime });
     setIsSubmitted(true);
@@ -147,9 +216,11 @@ function BookingPage() {
                                 {copiedFolio === v.folio ? 'COPIADO' : v.folio}
                               </button>
                             </div>
-                            <div className="flex items-center gap-2 pt-2 border-t border-slate-200/50 dark:border-zinc-800/50">
-                              <span className="text-[10px] text-slate-400 font-bold uppercase">Folio oficial:</span>
-                              <span className="text-sm font-black text-red-600 dark:text-red-500">{v.folio}</span>
+                            <div className="flex items-center gap-2 pt-3 border-t border-slate-200/50 dark:border-zinc-800/50">
+                              <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">VALIDACIÓN:</span>
+                              <span className="inline-flex px-3 py-1 bg-[#d41111]/10 text-[#d41111] dark:bg-[#d41111]/20 dark:text-red-400 rounded-lg text-lg font-black tracking-widest font-mono">
+                                {v.folio}
+                              </span>
                             </div>
                           </div>
                         ))}
@@ -317,13 +388,18 @@ function BookingPage() {
                             <label className="block text-sm font-semibold text-slate-700 dark:text-zinc-300 mb-2">Año del Modelo</label>
                             <input
                               type="number"
-                              min="1990"
-                              max={new Date().getFullYear() + 1}
+                              min="1980"
+                              max="2027"
                               {...register(`vehicles.${index}.model`)}
                               className="w-full px-5 py-4 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 focus:border-[#d41111] dark:focus:border-[#d41111] focus:ring-1 focus:ring-[#d41111] outline-none text-lg font-medium text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-zinc-600"
                               placeholder="2024"
                             />
                             {errors.vehicles?.[index]?.model && <p className="text-red-500 text-sm mt-2 font-medium">{errors.vehicles[index]?.model?.message}</p>}
+                            
+                            {/* Hologram indicator */}
+                            <AnimatePresence mode="wait">
+                              <HologramBadge key={watchedVehicles?.[index]?.model} yearStr={watchedVehicles?.[index]?.model || ''} />
+                            </AnimatePresence>
                           </div>
                         </motion.div>
                       ))}
@@ -365,78 +441,117 @@ function BookingPage() {
                       <p className="text-sm text-slate-500 dark:text-zinc-400 mt-2 ml-16">Selecciona el horario disponible para tu centro de verificación.</p>
                     </div>
 
-                    {(() => {
-                      const todayMX = new Intl.DateTimeFormat('en-CA', {
-                        timeZone: 'America/Mexico_City',
-                        year: 'numeric', month: '2-digit', day: '2-digit',
-                      }).format(new Date()); // gives YYYY-MM-DD
-                      const maxYear = new Date().getFullYear() + 1;
-                      return (
-                        <div className="mb-6">
-                          <div className="flex items-center justify-between mb-2">
-                            <label className="block text-sm font-semibold text-slate-700 dark:text-zinc-300">Fecha</label>
-                            <span className="text-xs text-slate-400 dark:text-zinc-500">Hoy: {new Intl.DateTimeFormat('es-MX', { timeZone: 'America/Mexico_City', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date())}</span>
+                    <div className="space-y-6 mb-8 border-b border-slate-100 dark:border-zinc-700/50 pb-8">
+                      <label className="block text-sm font-black text-slate-800 dark:text-white uppercase tracking-wider px-1">1. Selecciona tu Verificentro</label>
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        {verificationCenters.map((vc) => (
+                          <button
+                            key={vc.id}
+                            onClick={() => setSelectedCenter(vc)}
+                            className={`p-4 rounded-2xl border-2 transition-all text-left group ${
+                              selectedCenter?.id === vc.id
+                                ? 'border-[#d41111] bg-red-50 dark:bg-red-950/20 shadow-sm'
+                                : 'border-slate-100 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-900/50 hover:border-slate-200'
+                            }`}
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className={`p-2 rounded-xl border transition-colors ${
+                                selectedCenter?.id === vc.id 
+                                  ? 'bg-[#d41111] border-[#d41111] text-white' 
+                                  : 'bg-white dark:bg-zinc-800 border-slate-200 dark:border-zinc-700 text-slate-400'
+                              }`}>
+                                <MapPin className="w-5 h-5" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <h4 className={`font-black text-sm transition-colors ${
+                                  selectedCenter?.id === vc.id ? 'text-[#d41111]' : 'text-slate-800 dark:text-white'
+                                }`}>{vc.name}</h4>
+                                <p className="text-[10px] font-medium text-slate-500 dark:text-zinc-500 mt-0.5 truncate">{vc.address}</p>
+                                <div className="mt-2 flex items-center gap-2">
+                                  <span className="inline-flex px-1.5 py-0.5 rounded-md bg-slate-200 dark:bg-zinc-800 text-[9px] font-black uppercase text-slate-600 dark:text-zinc-400">{vc.zone}</span>
+                                </div>
+                              </div>
+                              {selectedCenter?.id === vc.id && (
+                                <div className="bg-[#d41111] rounded-full p-0.5">
+                                  <Check className="w-3 h-3 text-white" />
+                                </div>
+                              )}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-8 mb-8">
+                      {/* Left: Custom Calendar */}
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between px-1">
+                          <label className="block text-sm font-black text-slate-800 dark:text-white uppercase tracking-wider">2. Selecciona el día</label>
+                        </div>
+                        <CalendarPicker 
+                          selectedDate={selectedDate} 
+                          onDateSelect={(date) => setSelectedDate(date)} 
+                        />
+                      </div>
+
+                      {/* Right: Refined Time Slots */}
+                      <div className="space-y-6">
+                        <label className="block text-sm font-black text-slate-800 dark:text-white uppercase tracking-wider px-1">3. Elige tu horario</label>
+                        
+                        <div className="space-y-6 max-h-[430px] overflow-y-auto pr-2 custom-scrollbar">
+                          {/* Mañana */}
+                          <div className="bg-slate-50 dark:bg-zinc-900/50 p-4 rounded-3xl border border-slate-100 dark:border-zinc-800">
+                            <p className="text-[10px] font-black text-slate-400 dark:text-zinc-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-orange-400" /> ☀️ Mañana (Matutino)
+                            </p>
+                            <div className="grid grid-cols-3 gap-2">
+                              {['8:00 AM','8:30 AM','9:00 AM','9:30 AM','10:00 AM','10:30 AM','11:00 AM','11:30 AM'].map((time) => (
+                                <motion.button 
+                                  whileHover={{ scale: 1.02 }}
+                                  whileTap={{ scale: 0.98 }}
+                                  key={time} type="button" onClick={() => setSelectedTime(time)}
+                                  className={`py-3 rounded-2xl text-[11px] font-black transition-all duration-300 border-2 ${selectedTime === time ? 'bg-[#d41111] text-white border-[#d41111] shadow-lg shadow-red-500/20' : 'bg-white dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 border-slate-100 dark:border-zinc-700 hover:border-[#d41111]/30 hover:shadow-sm'}`}>
+                                  {time}
+                                </motion.button>
+                              ))}
+                            </div>
                           </div>
-                          <input
-                            type="date"
-                            min={todayMX}
-                            max={`${maxYear}-12-31`}
-                            value={selectedDate ?? todayMX}
-                            onChange={(e) => setSelectedDate(e.target.value)}
-                            className="w-full px-5 py-4 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 focus:border-[#d41111] outline-none transition-colors text-lg text-slate-900 dark:text-zinc-200 cursor-pointer"
-                          />
-                        </div>
-                      );
-                    })()}
 
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 dark:text-zinc-300 mb-4">Horario disponible</label>
+                          {/* Tarde */}
+                          <div className="bg-slate-50 dark:bg-zinc-900/50 p-4 rounded-3xl border border-slate-100 dark:border-zinc-800">
+                            <p className="text-[10px] font-black text-slate-400 dark:text-zinc-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-400" /> 🌤 Tarde (Vespertino)
+                            </p>
+                            <div className="grid grid-cols-3 gap-2">
+                              {['12:00 PM','12:30 PM','1:00 PM','1:30 PM','2:00 PM','2:30 PM','3:00 PM','3:30 PM'].map((time) => (
+                                <motion.button 
+                                  whileHover={{ scale: 1.02 }}
+                                  whileTap={{ scale: 0.98 }}
+                                  key={time} type="button" onClick={() => setSelectedTime(time)}
+                                  className={`py-3 rounded-2xl text-[11px] font-black transition-all duration-300 border-2 ${selectedTime === time ? 'bg-[#d41111] text-white border-[#d41111] shadow-lg shadow-red-500/20' : 'bg-white dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 border-slate-100 dark:border-zinc-700 hover:border-[#d41111]/30 hover:shadow-sm'}`}>
+                                  {time}
+                                </motion.button>
+                              ))}
+                            </div>
+                          </div>
 
-                      {/* Mañana */}
-                      <div className="mb-4">
-                        <p className="text-xs font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-widest mb-2">☀️ Mañana</p>
-                        <div className="grid grid-cols-4 gap-2">
-                          {['8:00 AM','8:30 AM','9:00 AM','9:30 AM','10:00 AM','10:30 AM','11:00 AM','11:30 AM'].map((time) => (
-                            <motion.button 
-                              whileHover={{ scale: 1.05 }}
-                              whileTap={{ scale: 0.95 }}
-                              key={time} type="button" onClick={() => setSelectedTime(time)}
-                              className={`py-2.5 px-1 rounded-xl text-xs font-bold transition-all duration-300 border ${selectedTime === time ? 'bg-[#d41111] text-white border-[#d41111] shadow-[0_0_12px_rgba(212,17,17,0.4)]' : 'bg-slate-50 dark:bg-zinc-900 text-slate-700 dark:text-zinc-400 border-slate-200 dark:border-zinc-700 hover:border-[#d41111] hover:text-[#d41111] hover:bg-white dark:hover:bg-zinc-800 hover:shadow-md'}`}>
-                              {time}
-                            </motion.button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Tarde */}
-                      <div className="mb-4">
-                        <p className="text-xs font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-widest mb-2">🌤 Tarde</p>
-                        <div className="grid grid-cols-4 gap-2">
-                          {['12:00 PM','12:30 PM','1:00 PM','1:30 PM','2:00 PM','2:30 PM','3:00 PM','3:30 PM'].map((time) => (
-                            <motion.button 
-                              whileHover={{ scale: 1.05 }}
-                              whileTap={{ scale: 0.95 }}
-                              key={time} type="button" onClick={() => setSelectedTime(time)}
-                              className={`py-2.5 px-1 rounded-xl text-xs font-bold transition-all duration-300 border ${selectedTime === time ? 'bg-[#d41111] text-white border-[#d41111] shadow-[0_0_12px_rgba(212,17,17,0.4)]' : 'bg-slate-50 dark:bg-zinc-900 text-slate-700 dark:text-zinc-400 border-slate-200 dark:border-zinc-700 hover:border-[#d41111] hover:text-[#d41111] hover:bg-white dark:hover:bg-zinc-800 hover:shadow-md'}`}>
-                              {time}
-                            </motion.button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Tarde-Noche */}
-                      <div>
-                        <p className="text-xs font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-widest mb-2">🌙 Tarde-Noche</p>
-                        <div className="grid grid-cols-4 gap-2">
-                          {['4:00 PM','4:30 PM','5:00 PM','5:30 PM','6:00 PM','6:30 PM','7:00 PM','7:30 PM'].map((time) => (
-                            <motion.button 
-                              whileHover={{ scale: 1.05 }}
-                              whileTap={{ scale: 0.95 }}
-                              key={time} type="button" onClick={() => setSelectedTime(time)}
-                              className={`py-2.5 px-1 rounded-xl text-xs font-bold transition-all duration-300 border ${selectedTime === time ? 'bg-[#d41111] text-white border-[#d41111] shadow-[0_0_12px_rgba(212,17,17,0.4)]' : 'bg-slate-50 dark:bg-zinc-900 text-slate-700 dark:text-zinc-400 border-slate-200 dark:border-zinc-700 hover:border-[#d41111] hover:text-[#d41111] hover:bg-white dark:hover:bg-zinc-800 hover:shadow-md'}`}>
-                              {time}
-                            </motion.button>
-                          ))}
+                          {/* Tarde-Noche */}
+                          <div className="bg-slate-50 dark:bg-zinc-900/50 p-4 rounded-3xl border border-slate-100 dark:border-zinc-800">
+                            <p className="text-[10px] font-black text-slate-400 dark:text-zinc-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" /> 🌙 Tarde-Noche
+                            </p>
+                            <div className="grid grid-cols-3 gap-2">
+                              {['4:00 PM','4:30 PM','5:00 PM','5:30 PM','6:00 PM','6:30 PM','7:00 PM','7:30 PM'].map((time) => (
+                                <motion.button 
+                                  whileHover={{ scale: 1.02 }}
+                                  whileTap={{ scale: 0.98 }}
+                                  key={time} type="button" onClick={() => setSelectedTime(time)}
+                                  className={`py-3 rounded-2xl text-[11px] font-black transition-all duration-300 border-2 ${selectedTime === time ? 'bg-[#d41111] text-white border-[#d41111] shadow-lg shadow-red-500/20' : 'bg-white dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 border-slate-100 dark:border-zinc-700 hover:border-[#d41111]/30 hover:shadow-sm'}`}>
+                                  {time}
+                                </motion.button>
+                              ))}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>

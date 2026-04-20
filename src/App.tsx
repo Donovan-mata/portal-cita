@@ -1,10 +1,13 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { useThemeStore } from '@/store/themeStore';
+import { useAuthStore } from '@/store/authStore';
+import PrivateRoute from '@/components/PrivateRoute';
 
 const HomePage = lazy(() => import('@/pages/HomePage'));
 const BookingPage = lazy(() => import('@/pages/BookingPage'));
 const MyCitasPage = lazy(() => import('@/pages/MyCitasPage'));
+const AuthPage = lazy(() => import('@/pages/AuthPage'));
 import CarPreloader from '@/components/CarPreloader';
 
 const router = createBrowserRouter([
@@ -13,12 +16,24 @@ const router = createBrowserRouter([
     element: <HomePage />,
   },
   {
+    path: '/auth',
+    element: <AuthPage />,
+  },
+  {
     path: '/booking',
-    element: <BookingPage />,
+    element: (
+      <PrivateRoute>
+        <BookingPage />
+      </PrivateRoute>
+    ),
   },
   {
     path: '/mis-citas',
-    element: <MyCitasPage />,
+    element: (
+      <PrivateRoute>
+        <MyCitasPage />
+      </PrivateRoute>
+    ),
   },
   {
     path: '*',
@@ -38,6 +53,7 @@ const router = createBrowserRouter([
 
 function App() {
   const { theme } = useThemeStore();
+  const { initialize } = useAuthStore();
   const [isInitializing, setIsInitializing] = useState(true);
 
   useEffect(() => {
@@ -48,13 +64,14 @@ function App() {
       document.documentElement.classList.remove('dark');
     }
     
-    // Simular tiempo mínimo de carga para mostrar la animación "Smoke Car"
-    const timer = setTimeout(() => {
-      setIsInitializing(false);
-    }, 2000); 
+    // Initialize auth + minimum preloader time
+    const authPromise = initialize();
+    const timerPromise = new Promise(resolve => setTimeout(resolve, 2000));
 
-    return () => clearTimeout(timer);
-  }, [theme]);
+    Promise.all([authPromise, timerPromise]).then(() => {
+      setIsInitializing(false);
+    });
+  }, [theme, initialize]);
 
   if (isInitializing) {
     return <CarPreloader />;
