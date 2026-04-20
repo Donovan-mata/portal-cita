@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
-import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import { createHashRouter, RouterProvider } from 'react-router-dom';
 import { useThemeStore } from '@/store/themeStore';
 import { useAuthStore } from '@/store/authStore';
 import PrivateRoute from '@/components/PrivateRoute';
@@ -10,7 +10,7 @@ const MyCitasPage = lazy(() => import('@/pages/MyCitasPage'));
 const AuthPage = lazy(() => import('@/pages/AuthPage'));
 import CarPreloader from '@/components/CarPreloader';
 
-const router = createBrowserRouter([
+const router = createHashRouter([
   {
     path: '/',
     element: <HomePage />,
